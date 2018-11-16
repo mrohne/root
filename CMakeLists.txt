@@ -10,6 +10,12 @@ endforeach()
 include(cmake/modules/CaptureCommandLine.cmake)
 
 project(ROOT)
+set(IntegratedBuild ON)
+set(MACOSX_RPATH TRUE)
+SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
+SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 #---Set the locale to default C to prevent issued due to localization of commands---------------
 # This is necessary as we for example call `clang -v` and parse its output. But on a localized
@@ -354,9 +360,11 @@ if(MSVC)
   string(REPLACE "-MDd" "" CMAKE_CXX_FLAGS_SEPARATE "${CMAKE_CXX_FLAGS_SEPARATE}")
 endif()
 
-add_custom_command(OUTPUT etc/dictpch/allLinkDefs.h
-                          etc/dictpch/allHeaders.h
-                          etc/dictpch/allCppflags.txt
+add_custom_target(dictpch DEPENDS
+			  etc/dictpch/allLinkDefs.h
+			  etc/dictpch/allHeaders.h
+			  etc/dictpch/allCppflags.txt)
+add_custom_command(TARGET dictpch
                    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/unix/makepchinput.py ${CMAKE_SOURCE_DIR} . ${__clingetcpch} -- ${CMAKE_CXX_FLAGS_SEPARATE}
                    DEPENDS ${CMAKE_SOURCE_DIR}/build/unix/makepchinput.py ${__allFiles})
 
@@ -383,14 +391,14 @@ if(runtime_cxxmodules)
   unset(ROOT_LIBRARY_TARGETS CACHE)
   set(FIXME_TEMPORARILY_EXCLUDED_FOR_RUNTIME_CXXMODULES On)
 else()
-  add_custom_command(OUTPUT etc/allDict.cxx.pch
+  add_custom_target(onepcm ALL DEPENDS etc/allDict.cxx.pch)
+  add_custom_command(TARGET onepcm
                     COMMAND ${CMAKE_COMMAND} -E env ROOTIGNOREPREFIX=1 ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/etc/dictpch/makepch.py etc/allDict.cxx.pch ${__allIncludes} -I${CMAKE_BINARY_DIR}/include
                     DEPENDS ${CMAKE_SOURCE_DIR}/etc/dictpch/makepch.py
                             etc/dictpch/allLinkDefs.h
                             etc/dictpch/allHeaders.h
                             etc/dictpch/allCppflags.txt
                             rootcling)
-  add_custom_target(onepcm ALL DEPENDS etc/allDict.cxx.pch)
   set_source_files_properties(${__allFiles} PROPERTIES GENERATED TRUE)
   add_dependencies(onepcm ${__allTargets})
   install(FILES ${CMAKE_BINARY_DIR}/etc/allDict.cxx.pch DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
@@ -408,14 +416,14 @@ install(
 add_custom_target(hsimple ALL DEPENDS tutorials/hsimple.root)
 add_dependencies(hsimple onepcm)
 if(WIN32)
-  add_custom_command(OUTPUT tutorials/hsimple.root
+  add_custom_command(TARGET hsimple
                      COMMAND set PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY} &&
                              set ROOTIGNOREPREFIX=1 &&
                              $<TARGET_FILE:root.exe> -l -q -b -n -x hsimple.C -e return
                      WORKING_DIRECTORY tutorials
                      DEPENDS $<TARGET_FILE:root.exe> Cling Hist Tree Gpad Graf HistPainter move_artifacts)
 else()
-  add_custom_command(OUTPUT tutorials/hsimple.root
+  add_custom_command(TARGET hsimple
                      COMMAND ${ld_library_path}=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}:$ENV{${ld_library_path}}
                              ROOTIGNOREPREFIX=1
                              $<TARGET_FILE:root.exe> -l -q -b -n -x hsimple.C -e return
